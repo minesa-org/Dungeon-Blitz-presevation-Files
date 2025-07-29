@@ -118,6 +118,32 @@ def test_enemy_brain():
     except Exception as e:
         print(f"   ERROR generating packets: {e}")
 
+    print("\n5. Testing enemy death and respawn system...")
+    # Simulate enemy death
+    enemy_data_copy = enemy_configs[1].copy()  # IntroGoblinDagger
+    enemy_data_copy["hp"] = 0  # Set HP to 0 (dead)
+    enemy_data_copy["entState"] = 3  # Dead state
+
+    print(f"   Simulating death of enemy {enemy_data_copy['id']}")
+    ai_manager.enemy_died(enemy_data_copy['id'])
+
+    # Check that dead enemy is removed from AI
+    actions = ai_manager.update_all_enemies(players)
+    print(f"   Actions after death: {len(actions)} (should be fewer)")
+
+    # Test respawn timer (simulate time passing)
+    print("   Testing respawn system (simulating 31 seconds)...")
+    # Manually trigger respawn by setting death time in the past
+    if enemy_data_copy['id'] in ai_manager.dead_enemies:
+        ai_manager.dead_enemies[enemy_data_copy['id']]['death_time'] = time.time() - 31
+
+    # Update AI to trigger respawn
+    actions = ai_manager.update_all_enemies(players)
+    respawn_actions = [a for a in actions if a.get('type') == 'respawn']
+    print(f"   Respawn actions: {len(respawn_actions)}")
+    if respawn_actions:
+        print(f"     Enemy {respawn_actions[0]['entity_id']} respawned!")
+
     print("\n✅ Complete AI System Test completed successfully!")
 
 if __name__ == "__main__":

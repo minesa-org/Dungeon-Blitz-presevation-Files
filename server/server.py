@@ -27,6 +27,7 @@ from static_server import start_static_server
 from entity import Send_Entity_Data, load_npc_data_for_level
 from level_config import DOOR_MAP, LEVEL_CONFIG, get_spawn_coordinates
 from enemy_ai import ai_manager
+from pet_ai import PetAIManager
 
 HOST = "127.0.0.1"
 PORTS = [8080]
@@ -34,6 +35,88 @@ pending_world = {}
 all_sessions = []
 current_characters = {}
 used_tokens = {}
+
+# Initialize AI managers
+pet_ai_manager = PetAIManager()
+
+# Pet ID to EntType mapping based on Login.swz.txt EntTypes
+PET_ID_TO_ENTTYPE = {
+    # Red pets (1-13)
+    1: "PetDjinnRed", 2: "PetSpriteRed", 3: "PetMonkeyRed", 4: "PetGhostRed", 5: "PetGhoulRed",
+    6: "PetPhoenixRed", 7: "PetDragon3Red", 8: "PetFairyRed", 9: "PetDragon2Red", 10: "PetCrowRed",
+    11: "PetDragonetteRed", 12: "PetAngelRed", 13: "PetOwlRed",
+    # Yellow pets (14-26)
+    14: "PetDjinnYellow", 15: "PetSpriteYellow", 16: "PetMonkeyYellow", 17: "PetGhostYellow", 18: "PetGhoulYellow",
+    19: "PetPhoenixYellow", 20: "PetDragon3Yellow", 21: "PetFairyYellow", 22: "PetDragon2Yellow", 23: "PetCrowYellow",
+    24: "PetDragonetteYellow", 25: "PetAngelYellow", 26: "PetOwlYellow",
+    # Blue pets (27-39)
+    27: "PetDjinnBlue", 28: "PetSpriteBlue", 29: "PetMonkeyBlue", 30: "PetGhostBlue", 31: "PetGhoulBlue",
+    32: "PetPhoenixBlue", 33: "PetDragon3Blue", 34: "PetFairyBlue", 35: "PetDragon2Blue", 36: "PetCrowBlue",
+    37: "PetDragonetteBlue", 38: "PetAngelBlue", 39: "PetOwlBlue",
+    # Green pets (40-52)
+    40: "PetDjinnGreen", 41: "PetSpriteGreen", 42: "PetMonkeyGreen", 43: "PetGhostGreen", 44: "PetGhoulGreen",
+    45: "PetPhoenixGreen", 46: "PetDragon3Green", 47: "PetFairyGreen", 48: "PetDragon2Green", 49: "PetCrowGreen",
+    50: "PetDragonetteGreen", 51: "PetAngelGreen", 52: "PetOwlGreen",
+    # Special pets (53-70)
+    53: "PetPumpkinRed", 54: "PetPumpkinYellow", 55: "PetPumpkinBlue", 56: "PetPumpkinGreen",
+    57: "PetGargoyleRed", 58: "PetGargoyleYellow", 59: "PetGargoyleBlue", 60: "PetGargoyleGreen",
+    61: "PetLockbox01L02", 62: "PetLockbox01L01", 63: "PetLockbox01RRed", 64: "PetLockbox01RYellow",
+    65: "PetLockbox01RBlue", 66: "PetLockbox01RGreen", 67: "PetFalconRed", 68: "PetFalconYellow",
+    69: "PetFalconBlue", 70: "PetFalconGreen"
+}
+
+def spawn_player_pet(session, char, owner_id):
+    """
+    Spawn a pet for the player if they have one equipped
+    """
+    try:
+        equipped_pet_id = char.get("equippedPetID", 0)
+        pet_iteration = char.get("petIteration", 0)
+
+        if equipped_pet_id > 0:
+            # Generate unique entity ID for the pet
+            pet_entity_id = owner_id + 10000  # Offset to avoid conflicts with player IDs
+
+            # Get player position for pet spawn
+            player_x = session.entities[owner_id]["x"]
+            player_y = session.entities[owner_id]["y"]
+
+            # Get the correct EntType name for this pet ID
+            pet_enttype_name = PET_ID_TO_ENTTYPE.get(equipped_pet_id, "PetDjinnRed")  # Default to PetDjinnRed if not found
+
+            # Create pet entity based on equipped pet data
+            pet_entity = {
+                "id": pet_entity_id,
+                "x": player_x + 50,  # Spawn pet slightly offset from player
+                "y": player_y,
+                "z": 0.0,
+                "entState": Entity.const_399,  # Ready state
+                "is_player": False,
+                "is_pet": True,
+                "owner_id": owner_id,
+                "name": pet_enttype_name,  # Use correct EntType name instead of Pet_{id}
+                "hp": 100,
+                "maxHP": 100,
+                "team": 1,  # Same team as player
+                "entType": EntType.PET,  # Pet entity type
+                "petTypeID": equipped_pet_id,
+                "petIteration": pet_iteration,
+                "facing_left": False,
+                "behavior_id": 0,  # Pets don't use enemy AI behavior
+                "level": char.get("level", 1),
+                "class": "Pet"
+            }
+
+            # Add pet to session entities
+            session.entities[pet_entity_id] = pet_entity
+
+            # Add pet to pet AI system
+            pet_ai_manager.add_pet(pet_entity_id, pet_entity, owner_id)
+
+            print(f"[{session.addr}] Spawned pet {pet_enttype_name} (ID: {equipped_pet_id}) for player {owner_id}")
+
+    except Exception as e:
+        print(f"[{session.addr}] Error spawning pet for player {owner_id}: {e}")
 
 # Loot drop system constants
 LOOT_DROP_CHANCE = 0.3  # 30% chance for legendary loot drop
@@ -378,8 +461,11 @@ class ClientSession:
             target_ent["entState"] = Entity.const_6  # Dead state
             print(f"[{self.addr}] [DEATH] Enemy {target_id} died!")
 
-        # Notify AI system that enemy was attacked
-        if not target_ent.get("is_player", False):
+            # Remove dead enemy from AI system
+            ai_manager.enemy_died(target_id)
+
+        # Notify AI system that enemy was attacked (only if still alive)
+        if not target_ent.get("is_player", False) and not enemy_died:
             ai_manager.enemy_attacked(target_id, attacker_id, damage)
             
             # If enemy died, handle loot drop
@@ -398,7 +484,13 @@ class ClientSession:
     def Send_NPC_Updates(self):
         for ent_id, entity in self.entities.items():
             if not entity.get("is_player", False):
-                entity["entState"] = 0
+                # Don't override the state of dead enemies
+                current_hp = entity.get("hp", 100)
+                if current_hp > 0 and entity.get("entState") != Entity.const_6:
+                    # Only reset state for living enemies that aren't in a special state
+                    if entity.get("entState") not in [Entity.const_467, Entity.const_6]:  # Don't override drama or dead states
+                        entity["entState"] = Entity.const_399  # Sleep state for idle enemies
+
                 update_packet = Send_Entity_Data(entity, is_player=False)
                 self.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
                 # print(f"[{self.addr}] [NPC Update] Sent 0x0F for NPC {ent_id}: state={entity['entState']}, pos=({entity['x']}, {entity['y']})")
@@ -472,6 +564,10 @@ def handle_client(session: ClientSession):
                     # Update AI and get actions
                     actions = ai_manager.update_all_enemies(players)
 
+                    # Update pet AI and get pet actions
+                    pet_actions = pet_ai_manager.update_pets(players, 0.1)  # 0.1 second delta time
+                    actions.extend(pet_actions)
+
                     # Debug actions
                     if actions:
                         print(f"[AI DEBUG] Generated {len(actions)} actions: {actions}")
@@ -501,6 +597,87 @@ def handle_client(session: ClientSession):
                                 for other_session in all_sessions:
                                     if other_session.world_loaded and other_session.current_level == session.current_level:
                                         other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                        elif action["type"] == "state_change":
+                            # Enemy animation state change
+                            entity_id = action["entity_id"]
+                            new_state = action["new_state"]
+                            if entity_id in session.entities:
+                                entity = session.entities[entity_id]
+                                entity["entState"] = new_state
+
+                                # Broadcast enemy state update
+                                update_packet = Send_Entity_Data(entity, is_player=False)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                                print(f"[AI] Enemy {entity_id} animation state changed to {new_state}")
+
+                        elif action["type"] == "respawn":
+                            # Enemy respawn
+                            entity_id = action["entity_id"]
+                            entity_data = action["entity_data"]
+
+                            # Update entity in session
+                            session.entities[entity_id] = entity_data
+
+                            # Broadcast enemy respawn to all clients
+                            update_packet = Send_Entity_Data(entity_data, is_player=False)
+                            for other_session in all_sessions:
+                                if other_session.world_loaded and other_session.current_level == session.current_level:
+                                    other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                            print(f"[AI] Enemy {entity_id} respawned and broadcasted to clients")
+
+                        elif action["type"] == "pet_move":
+                            # Pet movement
+                            entity_id = action["entity_id"]
+                            if entity_id in session.entities:
+                                entity = session.entities[entity_id]
+                                entity["x"] = action["x"]
+                                entity["y"] = action["y"]
+                                entity["facing_left"] = action.get("facing_left", False)
+
+                                # Broadcast pet position update
+                                update_packet = Send_Entity_Data(entity, is_player=False)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                        elif action["type"] == "pet_state_change":
+                            # Pet animation state change
+                            entity_id = action["entity_id"]
+                            new_state = action["new_state"]
+                            if entity_id in session.entities:
+                                entity = session.entities[entity_id]
+                                entity["entState"] = new_state
+
+                                # Broadcast pet state update
+                                update_packet = Send_Entity_Data(entity, is_player=False)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                                print(f"[Pet AI] Pet {entity_id} animation state changed to {new_state}")
+
+                        elif action["type"] == "pet_respawn":
+                            # Pet respawn
+                            entity_id = action["entity_id"]
+                            if entity_id in session.entities:
+                                entity = session.entities[entity_id]
+                                entity["x"] = action["x"]
+                                entity["y"] = action["y"]
+                                entity["entState"] = action["new_state"]
+                                entity["hp"] = entity.get("maxHP", 100)
+
+                                # Broadcast pet respawn to all clients
+                                update_packet = Send_Entity_Data(entity, is_player=False)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                                print(f"[Pet AI] Pet {entity_id} respawned and broadcasted to clients")
 
                 except Exception as e:
                     print(f"[AI] Error in AI update loop: {e}")
@@ -758,6 +935,9 @@ def handle_client(session: ClientSession):
                     "pantColor": char.get("pantColor", 0),
                     "equippedGears": char.get("equippedGears", [[0, 0, 0, 0, 0, 0]] * 6)
                 }
+
+                # Spawn player's pet if they have one equipped
+                spawn_player_pet(session, char, token)
                 used_tokens[token] = (
                     char, target_level, session.current_level or char.get("PreviousLevel", "NewbieRoad"))
                 # Calculate coordinates for Player_Data_Packet
@@ -1005,9 +1185,20 @@ def handle_client(session: ClientSession):
                         if npc.get("team", 0) != 1 and npc.get("behavior_id", 0) > 0:
                             ai_manager.add_enemy(npc["id"], npc)
 
+                    # Broadcast pets to all clients in the same level
+                    pets_spawned = 0
+                    for entity_id, entity in session.entities.items():
+                        if entity.get("is_pet", False):
+                            # Send pet entity to all clients in the same level
+                            pet_payload = Send_Entity_Data(entity, is_player=False)
+                            for other_session in all_sessions:
+                                if other_session.world_loaded and other_session.current_level == session.current_level:
+                                    other_session.conn.sendall(struct.pack(">HH", 0x0F, len(pet_payload)) + pet_payload)
+                            pets_spawned += 1
+
                     session.world_loaded = True
                     session.Send_NPC_Updates()  # Send initial NPC updates
-                    print(f"[{session.addr}] Spawned {len(npcs)} NPCs for level {session.current_level}")
+                    print(f"[{session.addr}] Spawned {len(npcs)} NPCs and {pets_spawned} pets for level {session.current_level}")
                 except Exception as e:
                     print(f"[{session.addr}] Error spawning NPCs: {e}")
 

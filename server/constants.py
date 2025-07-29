@@ -114,6 +114,7 @@ class EntType:
     STATE_IDLE = 6
     STATE_ACTIVE = 78
     CHAR_COLOR_BITSTOSEND = 24
+    PET = 1  # Pet entity type constant
 
 class DyeType:
     BITS = 8

@@ -4,12 +4,12 @@
       "CurrentLevel": {
         "name": "CraftTown",
         "x": 360,
-        "y": 1458.99
+        "y": 1459
       },
       "PreviousLevel": {
         "name": "NewbieRoad",
-        "x": 0,
-        "y": 0
+        "x": 6609,
+        "y": 941
       },
       "name": "Telahair",
       "class": "Rogue",
@@ -558,8 +558,8 @@
       },
       "activeAbilities": [
         3,
-        6,
-        72
+        70,
+        8
       ],
       "craftTalentPoints": [
         5,
@@ -8399,12 +8399,12 @@
       "CurrentLevel": {
         "name": "CraftTown",
         "x": 360,
-        "y": 1458.99
+        "y": 1459
       },
       "PreviousLevel": {
         "name": "NewbieRoad",
-        "x": 0,
-        "y": 0
+        "x": 2560,
+        "y": 614
       },
       "name": "Ceagahs",
       "class": "Rogue",
@@ -8506,7 +8506,7 @@
       "DragonKeys": 100000,
       "SilverSigils": 100000,
       "showHigher": true,
-      "MasterClass": 3,
+      "MasterClass": 2,
       "Mastery": {
         "1": {
           "classID": 1,

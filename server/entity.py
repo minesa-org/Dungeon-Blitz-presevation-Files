@@ -177,6 +177,36 @@ def Send_Entity_Data(entity: Dict[str, Any], is_player: bool = False) -> bytes:
     bb.write_bits(1 if facing_left else 0, 1)
     #print(f"Send_Entity_Data: Wrote facing left: {facing_left}")
 
+    # Movement flags for proper physics and animation (order matters for client parsing)
+    b_left = entity.get("bLeft", False)
+    bb.write_bits(1 if b_left else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bLeft flag: {b_left}")
+
+    b_running = entity.get("bRunning", False)
+    bb.write_bits(1 if b_running else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bRunning flag: {b_running}")
+
+    b_jumping = entity.get("bJumping", False)
+    bb.write_bits(1 if b_jumping else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bJumping flag: {b_jumping}")
+
+    b_dropping = entity.get("bDropping", False)
+    bb.write_bits(1 if b_dropping else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bDropping flag: {b_dropping}")
+
+    b_backpedal = entity.get("bBackpedal", False)
+    bb.write_bits(1 if b_backpedal else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bBackpedal flag: {b_backpedal}")
+
+    b_firing = entity.get("bFiring", False)
+    bb.write_bits(1 if b_firing else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bFiring flag: {b_firing}")
+
+    # Ground collision and movement properties for proper physics
+    b_goto_location = entity.get("bGotoLocation", False)
+    bb.write_bits(1 if b_goto_location else 0, 1)
+    #print(f"Send_Entity_Data: Wrote bGotoLocation flag: {b_goto_location}")
+
     # Player-Specific Equipment
     if is_player:
         #print("Send_Entity_Data: Processing player equipment")
