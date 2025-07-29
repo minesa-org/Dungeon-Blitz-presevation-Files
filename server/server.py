@@ -2,7 +2,7 @@
 import os
 import random
 import json
-import socket, struct, hashlib, sys, time, secrets, threading
+import socket, struct, hashlib, sys, time, secrets, threading, math
 from accounts import get_or_create_user_id, load_accounts, _SAVES_DIR, is_character_name_taken, build_popup_packet
 from Character import (
     make_character_dict_from_tuple,
@@ -26,6 +26,7 @@ from PolicyServer import start_policy_server
 from static_server import start_static_server
 from entity import Send_Entity_Data, load_npc_data_for_level
 from level_config import DOOR_MAP, LEVEL_CONFIG, get_spawn_coordinates
+from enemy_ai import ai_manager
 
 HOST = "127.0.0.1"
 PORTS = [8080]
@@ -33,6 +34,173 @@ pending_world = {}
 all_sessions = []
 current_characters = {}
 used_tokens = {}
+
+# Loot drop system constants
+LOOT_DROP_CHANCE = 0.3  # 30% chance for legendary loot drop
+LEGENDARY_TIER = 2  # Legendary rarity tier
+ROGUE_GEAR_IDS = [27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 1163, 1171, 1172, 1173, 1174, 1175, 1176]  # Actual Rogue gear IDs
+
+def generate_legendary_rogue_gear():
+    """Generate a random legendary Rogue equipment item"""
+    gear_id = random.choice(ROGUE_GEAR_IDS)
+    return {
+        "gearID": gear_id,
+        "tier": LEGENDARY_TIER,  # Legendary rarity
+        "runes": [0, 0, 0],  # No runes for now
+        "colors": [0, 0]  # Default colors
+    }
+
+def upgrade_rare_to_legendary(session):
+    """Check if player has Rare gear and upgrade one to Legendary"""
+    try:
+        chars = session.player_data.get("characters", [])
+        char = next((c for c in chars if c.get("name") == session.current_character), None)
+        
+        if char is None:
+            return None
+            
+        inventory = char.get("inventoryGears", [])
+        rare_gear = []
+        
+        # Find all Rare gear (tier 1)
+        for gear in inventory:
+            if gear.get("tier") == 1:  # Rare tier
+                rare_gear.append(gear)
+        
+        if rare_gear:
+            # Upgrade a random Rare gear to Legendary
+            gear_to_upgrade = random.choice(rare_gear)
+            gear_to_upgrade["tier"] = LEGENDARY_TIER
+            
+            # Save the character data
+            save_characters(session.user_id, chars)
+            
+            # Send notification to client about gear upgrade
+            send_gear_upgrade_notification(session, gear_to_upgrade)
+            
+            print(f"[LOOT] Upgraded Rare gear {gear_to_upgrade['gearID']} to Legendary")
+            return gear_to_upgrade
+            
+        return None
+        
+    except Exception as e:
+        print(f"[LOOT] Error upgrading Rare gear: {e}")
+        return None
+
+def send_gear_upgrade_notification(session, gear_data):
+    """Send a notification to the client about gear upgrade"""
+    try:
+        # Create a simple notification packet
+        bb = BitBuffer()
+        bb.write_utf_string(f"Rare gear upgraded to Legendary! Gear ID: {gear_data['gearID']}")
+        
+        payload = bb.to_bytes()
+        packet = struct.pack(">HH", 0x108, len(payload)) + payload  # Use a notification packet type
+        session.conn.sendall(packet)
+        
+        print(f"[LOOT] Sent gear upgrade notification for gear {gear_data['gearID']}")
+        
+    except Exception as e:
+        print(f"[LOOT] Error sending gear upgrade notification: {e}")
+
+def send_loot_drop_packet(session, x, y, gear_data):
+    """Send a loot drop packet to the client"""
+    try:
+        bb = BitBuffer()
+        
+        # Loot ID (random unique ID)
+        loot_id = random.randint(1000, 9999)
+        bb.write_method_4(loot_id)
+        
+        # Coordinates
+        bb.write_signed_method_45(int(x))
+        bb.write_signed_method_45(int(y))
+        
+        # First flag: Is it gear? (Yes)
+        bb.write_bits(1, 1)
+        
+        # Gear ID and tier (combined like Game.method_110)
+        gear_id = gear_data["gearID"]
+        tier = gear_data["tier"]
+        bb.write_method_6(gear_id, 11)  # GEARTYPE_BITSTOSEND
+        bb.write_method_6(tier, 11)     # GEARTYPE_BITSTOSEND for tier
+        
+        # Remaining flags (all false for gear)
+        bb.write_bits(0, 1)  # Not material
+        bb.write_bits(0, 1)  # Not gold
+        bb.write_bits(0, 1)  # Not soul
+        bb.write_bits(0, 1)  # Not charm
+        bb.write_bits(0, 1)  # Not consumable
+        
+        payload = bb.to_bytes()
+        packet = struct.pack(">HH", 0x106, len(payload)) + payload  # PKTTYPE_RECEIVE_LOOTDROP
+        session.conn.sendall(packet)
+        
+        print(f"[LOOT] Sent legendary Rogue gear drop: gearID={gear_id}, tier={tier}, pos=({x}, {y})")
+        return loot_id
+        
+    except Exception as e:
+        print(f"[LOOT] Error sending loot drop packet: {e}")
+        return None
+
+def add_gear_to_inventory(session, gear_data):
+    """Add the gear to the player's inventory"""
+    try:
+        chars = session.player_data.get("characters", [])
+        char = next((c for c in chars if c.get("name") == session.current_character), None)
+        
+        if char is None:
+            print(f"[LOOT] Character {session.current_character} not found")
+            return False
+            
+        inventory = char.setdefault("inventoryGears", [])
+        
+        # Add the gear to inventory
+        inventory.append(gear_data)
+        
+        # Save the character data
+        save_characters(session.user_id, chars)
+        
+        print(f"[LOOT] Added gear to inventory: {gear_data}")
+        return True
+        
+    except Exception as e:
+        print(f"[LOOT] Error adding gear to inventory: {e}")
+        return False
+
+def handle_enemy_death(session, enemy_id, enemy_data, attacker_id):
+    """Handle enemy death and potential loot drops"""
+    try:
+        # Check if enemy should drop loot (30% chance)
+        if random.random() > LOOT_DROP_CHANCE:
+            return
+            
+        # First try to upgrade existing Rare gear to Legendary
+        upgraded_gear = upgrade_rare_to_legendary(session)
+        
+        if upgraded_gear:
+            # Send notification about upgraded gear
+            print(f"[LOOT] Enemy {enemy_id} caused Rare gear upgrade to Legendary for player {attacker_id}")
+            return
+            
+        # If no Rare gear to upgrade, generate new legendary Rogue gear
+        gear_data = generate_legendary_rogue_gear()
+        
+        # Get enemy position for loot drop
+        x = enemy_data.get("x", 0)
+        y = enemy_data.get("y", 0)
+        
+        # Send loot drop packet to client
+        loot_id = send_loot_drop_packet(session, x, y, gear_data)
+        
+        if loot_id:
+            # Add gear to player's inventory
+            add_gear_to_inventory(session, gear_data)
+            
+            print(f"[LOOT] Enemy {enemy_id} dropped legendary Rogue gear for player {attacker_id}")
+            
+    except Exception as e:
+        print(f"[LOOT] Error handling enemy death: {e}")
 
 def build_handshake_response(sid):
     b = sid.to_bytes(2, "big")
@@ -148,11 +316,35 @@ class ClientSession:
         if not target_ent:
             print(f"[{self.addr}] [PKT0F] Target entity {target_id} not found")
             return
-        target_ent["damage_taken"] = target_ent.get("damage_taken", 0) + damage
+            
+        # Calculate current HP and damage
+        current_hp = target_ent.get("hp", 100)
+        damage_taken = target_ent.get("damage_taken", 0) + damage
+        new_hp = max(0, current_hp - damage)
+        
+        target_ent["damage_taken"] = damage_taken
         target_ent["health_delta"] = -damage
         target_ent["attacker_id"] = attacker_id
+        target_ent["hp"] = new_hp
+        
         print(
-            f"[{self.addr}] [PKT0F] NPC {target_id} attacked by {attacker_id}, damage={damage}, new HP {target_ent.get('hp', 0)}")
+            f"[{self.addr}] [PKT0F] NPC {target_id} attacked by {attacker_id}, damage={damage}, new HP {new_hp}")
+
+        # Check if enemy died
+        enemy_died = False
+        if not target_ent.get("is_player", False) and new_hp <= 0:
+            enemy_died = True
+            target_ent["entState"] = Entity.const_6  # Dead state
+            print(f"[{self.addr}] [DEATH] Enemy {target_id} died!")
+
+        # Notify AI system that enemy was attacked
+        if not target_ent.get("is_player", False):
+            ai_manager.enemy_attacked(target_id, attacker_id, damage)
+            
+            # If enemy died, handle loot drop
+            if enemy_died:
+                handle_enemy_death(self, target_id, target_ent, attacker_id)
+
         update_packet = Send_Entity_Data(target_ent, is_player=False)
         for other_session in all_sessions:
             if other_session.world_loaded and other_session.current_level == self.current_level:
@@ -214,6 +406,73 @@ def handle_client(session: ClientSession):
             session.Send_NPC_Updates()
             time.sleep(1)  # Update every 1 second
 
+    def ai_update_loop():
+        """AI update loop that handles enemy behavior"""
+        loop_count = 0
+        while session.running:
+            if session.world_loaded and session.entities:
+                try:
+                    loop_count += 1
+                    # Get all player entities for AI to consider
+                    players = {eid: entity for eid, entity in session.entities.items()
+                              if entity.get("is_player", False)}
+
+                    # Debug output every 50 loops (5 seconds)
+                    if loop_count % 50 == 0:
+                        print(f"[AI DEBUG] Loop {loop_count}: {len(players)} players, {len(ai_manager.enemy_brains)} enemies")
+                        for pid, player in players.items():
+                            print(f"  Player {pid}: {player.get('name', 'Unknown')} at ({player.get('x', 0)}, {player.get('y', 0)})")
+                        for eid, brain in ai_manager.enemy_brains.items():
+                            print(f"  Enemy {eid}: state={brain.state}, pos=({brain.current_x}, {brain.current_y}), target={brain.most_hated_entity}")
+
+                    # Update AI and get actions
+                    actions = ai_manager.update_all_enemies(players)
+
+                    # Debug actions
+                    if actions:
+                        print(f"[AI DEBUG] Generated {len(actions)} actions: {actions}")
+
+                    # Process AI actions
+                    for action in actions:
+                        if action["type"] == "attack":
+                            # Enemy attacking player
+                            attacker_id = action["attacker_id"]
+                            target_id = action["target_id"]
+                            damage = action["damage"]
+
+                            # Apply damage to player
+                            if target_id in session.entities:
+                                target_player = session.entities[target_id]
+                                target_player["health_delta"] = -damage
+                                target_player["attacker_id"] = attacker_id
+
+                                # Broadcast player damage update
+                                update_packet = Send_Entity_Data(target_player, is_player=True)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                                print(f"[AI] Enemy {attacker_id} attacked player {target_id} for {damage} damage")
+
+                        elif action["type"] == "move":
+                            # Enemy movement
+                            entity_id = action["entity_id"]
+                            if entity_id in session.entities:
+                                entity = session.entities[entity_id]
+                                entity["x"] = action["x"]
+                                entity["y"] = action["y"]
+
+                                # Broadcast enemy position update
+                                update_packet = Send_Entity_Data(entity, is_player=False)
+                                for other_session in all_sessions:
+                                    if other_session.world_loaded and other_session.current_level == session.current_level:
+                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
+
+                except Exception as e:
+                    print(f"[AI] Error in AI update loop: {e}")
+
+            time.sleep(0.1)  # Update AI 10 times per second
+
     def forge_tick_loop():
         while session.running:
             tick_forge_status(session)
@@ -226,6 +485,7 @@ def handle_client(session: ClientSession):
         # Start NPC update thread
         threading.Thread(target=forge_tick_loop, daemon=True).start()
         threading.Thread(target=npc_update_loop, daemon=True).start()
+        threading.Thread(target=ai_update_loop, daemon=True).start()
         while True:
             hdr = read_exact(conn, 4)
             if not hdr:
@@ -447,7 +707,7 @@ def handle_client(session: ClientSession):
                     "x": 360.0,  # Temporary; will be overridden by Player_Data_Packet
                     "y": 1458.99,
                     "z": 0.0,
-                    "entState": Entity.const_6,
+                    "entState": Entity.const_78,  # Active state (0) instead of dead state (3)
                     "is_player": True,
                     "name": char["name"],
                     "hp": char.get("hp", 100),
@@ -695,9 +955,14 @@ def handle_client(session: ClientSession):
                         conn.sendall(struct.pack(">HH", 0x0F, len(payload)) + payload)
                         session.entities[npc["id"]] = npc
                         session.spawned_npcs.append(npc)
+
+                        # Add enemy to AI system if it's hostile (team != 1 which is player team)
+                        if npc.get("team", 0) != 1 and npc.get("behavior_id", 0) > 0:
+                            ai_manager.add_enemy(npc["id"], npc)
+
                     session.world_loaded = True
                     session.Send_NPC_Updates()  # Send initial NPC updates
-                    # print(f"[{session.addr}] Spawned {len(npcs)} NPCs for level {session.current_level}")
+                    print(f"[{session.addr}] Spawned {len(npcs)} NPCs for level {session.current_level}")
                 except Exception as e:
                     print(f"[{session.addr}] Error spawning NPCs: {e}")
 
@@ -766,6 +1031,16 @@ def handle_client(session: ClientSession):
                 pass
             elif pkt == 0x10E:
                 pass
+            elif pkt == 0x107:  # PKTTYPE_PICKUP_LOOTDROP (approximate)
+                # Handle loot pickup
+                try:
+                    br = BitReader(data[4:])
+                    loot_id = br.read_method_4()
+                    print(f"[LOOT] Player picked up loot ID: {loot_id}")
+                    # The gear is already added to inventory when dropped
+                    # This is just for confirmation
+                except Exception as e:
+                    print(f"[LOOT] Error handling loot pickup: {e}")
 
             else:
                 print(f"[{session.addr}] Unhandled packet type: 0x{pkt:02X}, raw payload = {data.hex()}")

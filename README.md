@@ -1,4 +1,45 @@
-# 🏰 Dungeon Blitz - Flash Reboot
+# Dungeon Blitz Preservation Files
+
+This repository contains the preservation files for Dungeon Blitz, including server implementation, client scripts, and game assets.
+
+## Features
+
+### Legendary Loot Drop System
+
+A new loot drop system has been implemented that provides legendary Rogue equipment when enemies are killed:
+
+- **30% chance** for legendary loot drop when an enemy dies
+- **Rogue equipment only** - generates random Rogue gear items
+- **Rare to Legendary upgrade** - if the player has Rare (tier 1) gear, it will be upgraded to Legendary (tier 2) instead of dropping new gear
+- **Automatic inventory addition** - loot is automatically added to the player's inventory
+- **Visual loot drops** - loot appears on the ground where the enemy died
+
+#### How it works:
+
+1. When an enemy dies (HP reaches 0), the system checks for a 30% chance to drop loot
+2. If the player has Rare gear in their inventory, one random Rare item is upgraded to Legendary
+3. If no Rare gear exists, a new Legendary Rogue equipment item is generated and dropped
+4. The loot appears at the enemy's death location
+5. When the player picks up the loot, it's automatically added to their inventory
+
+#### Supported Rogue Gear IDs:
+
+The system generates loot from the following Rogue gear IDs:
+- 27-52: Basic Rogue equipment
+- 109-138: Advanced Rogue equipment  
+- 199-228: Elite Rogue equipment
+- 289-302: Master Rogue equipment
+- 1163, 1171-1176: Special Rogue equipment
+
+#### Rarity Tiers:
+
+- **Tier 0**: Magic (M)
+- **Tier 1**: Rare (R) 
+- **Tier 2**: Legendary (L)
+
+The system specifically generates Legendary (tier 2) equipment.
+
+## Server Setup
 
 ### Reviving the original Dungeon Blitz experience for archival and preservation purposes.
 

@@ -1153,8 +1153,11 @@ def handle_entity_incremental_update(session, data, all_sessions):
         ent.update({
             'pos_x': new_x,
             'pos_y': new_y,
+            'x': new_x,  # Also set x/y for AI system compatibility
+            'y': new_y,
             'velocity_x': ent.get('velocity_x', 0) + delta_vx,
             'ent_state': ent_state,
+            'entState': ent_state,  # Also set entState for AI system compatibility
             **{f'b_{k}': v for k,v in flags.items()},
             'velocity_y': velocity_y,
             'is_player': ent.get('is_player', False)
@@ -1428,6 +1431,26 @@ def handle_position_sync(session, data, all_sessions):
         client_time = br.read_method_24()  # _loc7_ (client time delta)
         is_desync = bool(br.read_bit())   # _loc10_ (desync flag)
         server_time = br.read_method_24()  # _loc8_ (server time delta)
+
+        # Try to extract player position from the packet for AI system
+        # Position data should be in the packet after the timing data
+        if br.bit_index < len(payload) * 8 - 64:  # Make sure we have enough bits left
+            try:
+                # Try to read position data (this is a guess at the format)
+                x = br.read_signed_method_45()  # Player X position
+                y = br.read_signed_method_45()  # Player Y position
+
+                # Update player entity position for AI system
+                if session.clientEntID and session.clientEntID in session.entities:
+                    player_entity = session.entities[session.clientEntID]
+                    player_entity["x"] = float(x)
+                    player_entity["y"] = float(y)
+                    #print(f"[AI DEBUG] Updated player {session.clientEntID} position to ({x}, {y})")
+
+            except Exception as pos_e:
+                # If position extraction fails, that's okay - just continue with broadcast
+                pass
+
         #print(f"[{session.addr}] [PKTA2] Position sync: client_time={client_time}, is_desync={is_desync}, server_time={server_time}, bits_consumed={br.bit_index}")
         # Broadcast to other clients in the same level
         for other_session in all_sessions:
