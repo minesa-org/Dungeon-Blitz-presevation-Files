@@ -5,7 +5,7 @@ Test script for the legendary loot drop system
 
 import random
 import json
-from server import generate_legendary_rogue_gear, ROGUE_GEAR_IDS, LEGENDARY_TIER
+from server import generate_legendary_rogue_gear, ROGUE_GEAR_IDS, LEGENDARY_TIER, SPECIAL_LOOT_DROPS
 
 def test_gear_generation():
     """Test that legendary Rogue gear is generated correctly"""
@@ -71,6 +71,39 @@ def test_loot_drop_chance():
     assert abs(actual_chance - expected_chance) < 0.05, f"Drop chance too far from expected: {actual_chance:.1%}"
     print("✓ Loot drop chance test passed!")
 
+def test_special_loot_drops():
+    """Test the special loot drop system for IntroGoblinDagger"""
+    print("Testing special loot drops for IntroGoblinDagger...")
+    
+    # Check that IntroGoblinDagger has special loot configured
+    assert "IntroGoblinDagger" in SPECIAL_LOOT_DROPS, "IntroGoblinDagger not found in special loot drops"
+    
+    # Check that Wolf's End Game is configured
+    assert "Wolf's End Game" in SPECIAL_LOOT_DROPS["IntroGoblinDagger"], "Wolf's End Game not found in IntroGoblinDagger loot"
+    
+    wolf_end_game = SPECIAL_LOOT_DROPS["IntroGoblinDagger"]["Wolf's End Game"]
+    
+    # Verify the item configuration
+    assert wolf_end_game["gearID"] == 20007, f"Wrong gear ID: {wolf_end_game['gearID']}, expected 20007"
+    assert wolf_end_game["tier"] == LEGENDARY_TIER, f"Wrong tier: {wolf_end_game['tier']}, expected {LEGENDARY_TIER}"
+    assert wolf_end_game["drop_chance"] == 1.0, f"Wrong drop chance: {wolf_end_game['drop_chance']}, expected 1.0"
+    assert len(wolf_end_game["runes"]) == 3, f"Wrong number of runes: {len(wolf_end_game['runes'])}"
+    assert len(wolf_end_game["colors"]) == 2, f"Wrong number of colors: {len(wolf_end_game['colors'])}"
+    
+    print("✓ Special loot drop configuration is correct!")
+    
+    # Test drop simulation
+    drops = 0
+    total = 100
+    
+    for _ in range(total):
+        if random.random() <= wolf_end_game["drop_chance"]:
+            drops += 1
+    
+    print(f"Wolf's End Game drop rate: {drops}/{total} ({drops/total:.1%})")
+    assert drops == total, f"Expected 100% drop rate, got {drops/total:.1%}"
+    print("✓ 100% drop rate test passed!")
+
 def main():
     """Run all tests"""
     print("=== Legendary Loot Drop System Tests ===\n")
@@ -81,6 +114,8 @@ def main():
         test_rogue_gear_ids()
         print()
         test_loot_drop_chance()
+        print()
+        test_special_loot_drops()
         print()
         
         print("🎉 All tests passed! The loot system is working correctly.")

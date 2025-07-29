@@ -40,6 +40,19 @@ LOOT_DROP_CHANCE = 0.3  # 30% chance for legendary loot drop
 LEGENDARY_TIER = 2  # Legendary rarity tier
 ROGUE_GEAR_IDS = [27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 1163, 1171, 1172, 1173, 1174, 1175, 1176]  # Actual Rogue gear IDs
 
+# Special loot drops for specific enemies
+SPECIAL_LOOT_DROPS = {
+    "IntroGoblinDagger": {
+        "Wolf's End Game": {
+            "gearID": 20007,  # Wolfclaw Dagger gear ID
+            "tier": LEGENDARY_TIER,
+            "drop_chance": 1.0,  # 100% drop chance
+            "runes": [0, 0, 0],
+            "colors": [0, 0]
+        }
+    }
+}
+
 def generate_legendary_rogue_gear():
     """Generate a random legendary Rogue equipment item"""
     gear_id = random.choice(ROGUE_GEAR_IDS)
@@ -171,7 +184,35 @@ def add_gear_to_inventory(session, gear_data):
 def handle_enemy_death(session, enemy_id, enemy_data, attacker_id):
     """Handle enemy death and potential loot drops"""
     try:
-        # Check if enemy should drop loot (30% chance)
+        enemy_name = enemy_data.get("name", "")
+        
+        # Check for special loot drops first
+        if enemy_name in SPECIAL_LOOT_DROPS:
+            for item_name, item_data in SPECIAL_LOOT_DROPS[enemy_name].items():
+                if random.random() <= item_data["drop_chance"]:
+                    # Generate special loot
+                    gear_data = {
+                        "gearID": item_data["gearID"],
+                        "tier": item_data["tier"],
+                        "runes": item_data["runes"],
+                        "colors": item_data["colors"]
+                    }
+                    
+                    # Get enemy position for loot drop
+                    x = enemy_data.get("x", 0)
+                    y = enemy_data.get("y", 0)
+                    
+                    # Send loot drop packet to client
+                    loot_id = send_loot_drop_packet(session, x, y, gear_data)
+                    
+                    if loot_id:
+                        # Add gear to player's inventory
+                        add_gear_to_inventory(session, gear_data)
+                        
+                        print(f"[LOOT] Enemy {enemy_id} ({enemy_name}) dropped {item_name} for player {attacker_id}")
+                        return  # Exit after special loot drop
+        
+        # Regular loot system (30% chance for legendary Rogue gear)
         if random.random() > LOOT_DROP_CHANCE:
             return
             
@@ -345,11 +386,14 @@ class ClientSession:
             if enemy_died:
                 handle_enemy_death(self, target_id, target_ent, attacker_id)
 
-        update_packet = Send_Entity_Data(target_ent, is_player=False)
+        # Send appropriate packet based on entity type
+        is_player_entity = target_ent.get("is_player", False)
+        update_packet = Send_Entity_Data(target_ent, is_player=is_player_entity)
         for other_session in all_sessions:
             if other_session.world_loaded and other_session.current_level == self.current_level:
                 other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
-                print(f"[{self.addr}] [PKT0F] Broadcasted NPC {target_id} update to {other_session.addr}")
+                entity_type = "Player" if is_player_entity else "NPC"
+                print(f"[{self.addr}] [PKT0F] Broadcasted {entity_type} {target_id} update to {other_session.addr}")
 
     def Send_NPC_Updates(self):
         for ent_id, entity in self.entities.items():
@@ -435,24 +479,14 @@ def handle_client(session: ClientSession):
                     # Process AI actions
                     for action in actions:
                         if action["type"] == "attack":
-                            # Enemy attacking player
+                            # Enemy attacking player - use the existing attack_entity method
                             attacker_id = action["attacker_id"]
                             target_id = action["target_id"]
                             damage = action["damage"]
 
-                            # Apply damage to player
-                            if target_id in session.entities:
-                                target_player = session.entities[target_id]
-                                target_player["health_delta"] = -damage
-                                target_player["attacker_id"] = attacker_id
-
-                                # Broadcast player damage update
-                                update_packet = Send_Entity_Data(target_player, is_player=True)
-                                for other_session in all_sessions:
-                                    if other_session.world_loaded and other_session.current_level == session.current_level:
-                                        other_session.conn.sendall(struct.pack(">HH", 0x0F, len(update_packet)) + update_packet)
-
-                                print(f"[AI] Enemy {attacker_id} attacked player {target_id} for {damage} damage")
+                            # Use the existing attack method which handles all the packet formatting correctly
+                            session.attack_entity(attacker_id, target_id, damage)
+                            print(f"[AI] Enemy {attacker_id} attacked player {target_id} for {damage} damage")
 
                         elif action["type"] == "move":
                             # Enemy movement
@@ -711,7 +745,18 @@ def handle_client(session: ClientSession):
                     "is_player": True,
                     "name": char["name"],
                     "hp": char.get("hp", 100),
-                    "max_hp": char.get("max_hp", 100)
+                    "max_hp": char.get("max_hp", 100),
+                    # Add appearance data required for player entity packets
+                    "class": char.get("class", "Paladin"),
+                    "headSet": char.get("headSet", "Head01"),
+                    "hairSet": char.get("hairSet", "Hair01"),
+                    "mouthSet": char.get("mouthSet", "Mouth01"),
+                    "faceSet": char.get("faceSet", "Face01"),
+                    "hairColor": char.get("hairColor", 0),
+                    "skinColor": char.get("skinColor", 0),
+                    "shirtColor": char.get("shirtColor", 0),
+                    "pantColor": char.get("pantColor", 0),
+                    "equippedGears": char.get("equippedGears", [[0, 0, 0, 0, 0, 0]] * 6)
                 }
                 used_tokens[token] = (
                     char, target_level, session.current_level or char.get("PreviousLevel", "NewbieRoad"))

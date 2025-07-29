@@ -14,13 +14,21 @@ A new loot drop system has been implemented that provides legendary Rogue equipm
 - **Automatic inventory addition** - loot is automatically added to the player's inventory
 - **Visual loot drops** - loot appears on the ground where the enemy died
 
+#### Special Loot Drops
+
+Some enemies have special loot drops with guaranteed items:
+
+- **IntroGoblinDagger**: 100% chance to drop "Wolf's End Game" (Wolfclaw Dagger) - Legendary tier weapon
+
 #### How it works:
 
-1. When an enemy dies (HP reaches 0), the system checks for a 30% chance to drop loot
-2. If the player has Rare gear in their inventory, one random Rare item is upgraded to Legendary
-3. If no Rare gear exists, a new Legendary Rogue equipment item is generated and dropped
-4. The loot appears at the enemy's death location
-5. When the player picks up the loot, it's automatically added to their inventory
+1. When an enemy dies (HP reaches 0), the system checks for special loot drops first
+2. If the enemy has special loot configured (like IntroGoblinDagger), it drops the guaranteed item
+3. If no special loot, the system checks for a 30% chance to drop regular legendary loot
+4. If the player has Rare gear in their inventory, one random Rare item is upgraded to Legendary
+5. If no Rare gear exists, a new Legendary Rogue equipment item is generated and dropped
+6. The loot appears at the enemy's death location
+7. When the player picks up the loot, it's automatically added to their inventory
 
 #### Supported Rogue Gear IDs:
 

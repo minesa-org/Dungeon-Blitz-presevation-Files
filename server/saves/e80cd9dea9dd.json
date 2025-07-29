@@ -1,5 +1,4 @@
 {
-  "email": "tela@gmail.com",
   "characters": [
     {
       "CurrentLevel": {
@@ -26,8 +25,60 @@
       "pantColor": 15461355,
       "equippedGears": [
         {
-          "gearID": 0,
-          "tier": 0,
+          "gearID": 1174,
+          "tier": 1,
+          "runes": [
+            55,
+            55,
+            55
+          ],
+          "colors": [
+            0,
+            0
+          ]
+        },
+        {
+          "gearID": 1175,
+          "tier": 1,
+          "runes": [
+            55,
+            55,
+            55
+          ],
+          "colors": [
+            0,
+            0
+          ]
+        },
+        {
+          "gearID": 1176,
+          "tier": 1,
+          "runes": [
+            55,
+            55,
+            55
+          ],
+          "colors": [
+            0,
+            0
+          ]
+        },
+        {
+          "gearID": 1173,
+          "tier": 1,
+          "runes": [
+            55,
+            0,
+            0
+          ],
+          "colors": [
+            0,
+            0
+          ]
+        },
+        {
+          "gearID": 1171,
+          "tier": 1,
           "runes": [
             0,
             0,
@@ -39,60 +90,8 @@
           ]
         },
         {
-          "gearID": 0,
-          "tier": 0,
-          "runes": [
-            0,
-            0,
-            0
-          ],
-          "colors": [
-            0,
-            0
-          ]
-        },
-        {
-          "gearID": 0,
-          "tier": 0,
-          "runes": [
-            0,
-            0,
-            0
-          ],
-          "colors": [
-            0,
-            0
-          ]
-        },
-        {
-          "gearID": 0,
-          "tier": 0,
-          "runes": [
-            0,
-            0,
-            0
-          ],
-          "colors": [
-            0,
-            0
-          ]
-        },
-        {
-          "gearID": 27,
-          "tier": 0,
-          "runes": [
-            0,
-            0,
-            0
-          ],
-          "colors": [
-            0,
-            0
-          ]
-        },
-        {
-          "gearID": 39,
-          "tier": 0,
+          "gearID": 1172,
+          "tier": 1,
           "runes": [
             0,
             0,
@@ -112,7 +111,7 @@
       "DragonKeys": 100000,
       "SilverSigils": 100000,
       "showHigher": true,
-      "MasterClass": 3,
+      "MasterClass": 2,
       "Mastery": {
         "1": {
           "classID": 1,
@@ -559,8 +558,8 @@
       },
       "activeAbilities": [
         3,
-        5,
-        9
+        6,
+        72
       ],
       "craftTalentPoints": [
         5,
@@ -6742,7 +6741,7 @@
           "gearID": 1173,
           "tier": 1,
           "runes": [
-            0,
+            55,
             0,
             0
           ],
@@ -6755,9 +6754,9 @@
           "gearID": 1174,
           "tier": 1,
           "runes": [
-            0,
-            0,
-            0
+            55,
+            55,
+            55
           ],
           "colors": [
             0,
@@ -6768,9 +6767,9 @@
           "gearID": 1175,
           "tier": 1,
           "runes": [
-            0,
-            0,
-            0
+            55,
+            55,
+            55
           ],
           "colors": [
             0,
@@ -6781,9 +6780,9 @@
           "gearID": 1176,
           "tier": 1,
           "runes": [
-            0,
-            0,
-            0
+            55,
+            55,
+            55
           ],
           "colors": [
             0,
@@ -7545,10 +7544,6 @@
         },
         {
           "charmID": 54,
-          "count": 10
-        },
-        {
-          "charmID": 55,
           "count": 10
         },
         {
