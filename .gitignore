@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 Accounts.json/
 saves/
+
+node_modules/

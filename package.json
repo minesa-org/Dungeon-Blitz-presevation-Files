@@ -1,0 +1,32 @@
+{
+	"name": "dungeon-blitz-presevation-files",
+	"version": "1.0.0",
+	"description": ":paw_prints: The project [Contributors](../../contributors)",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/minesa-org/Dungeon-Blitz-presevation-Files.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "module",
+	"bugs": {
+		"url": "https://github.com/minesa-org/Dungeon-Blitz-presevation-Files/issues"
+	},
+	"homepage": "https://github.com/minesa-org/Dungeon-Blitz-presevation-Files#readme",
+	"dependencies": {
+		"express": "^5.1.0",
+		"serve-handler": "^6.1.6"
+	},
+	"devDependencies": {
+		"@types/express": "^5.0.3",
+		"@types/node": "^24.3.0",
+		"@types/serve-handler": "^6.1.4",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.9.2"
+	}
+}
